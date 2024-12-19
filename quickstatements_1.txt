@@ -1,7 +1,3 @@
-Q17250166	P13162	"Comprehensive catalogue of Queensland plants, both indigenous and naturalised. To which are added, where known, the aboriginal and other vernacular names; with numerous illustrations, and copious (14596112528).jpg"	S887	Q131478853
-Q17251621	P13162	"S. elegans.jpg"	S887	Q131478853
-Q17250613	P13162	"Atlas der baumarten von Java (Figur 573) BHL47163526.jpg"	S887	Q131478853
-Q17252911	P13162	"Atlas der baumarten von Java (Figur 575) BHL47163530.jpg"	S887	Q131478853
-Q17249841	P13162	"Atlas der baumarten von Java (Figur 576) BHL47163532.jpg"	S887	Q131478853
-Q17251584	P13162	"Atlas der baumarten von Java (Figur 577) BHL47163534.jpg"	S887	Q131478853
-Q17251135	P13162	"Atlas der baumarten von Java (Figur 572) BHL47163524.jpg"	S887	Q131478853
+Q15337405	P13162	"Acanthus arboreus johnston.jpg"	S887	Q131478853
+Q15339205	P13162	"Luigi Balugani - Acanthus Sennii Chiov , finished drawing with added details - B1977.14.9099 - Yale Center for British Art.jpg"	S887	Q131478853
+Q4672078	P13162	"Hortus Eystettensis, 1640 (BHL 45339 293) - Classis Aestiva 141.jpg"	S887	Q131478853

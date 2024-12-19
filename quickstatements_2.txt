@@ -1,4 +1,0 @@
-Q5464239	P13162	"Atlas der baumarten von Java (Figur 574) BHL47163528.jpg"	S887	Q131478853
-Q5464239	P13162	"Atlas der baumarten von Java (Figur 578) BHL47163536.jpg"	S887	Q131478853
-Q5464243	P13162	"Atlas der baumarten von Java (Figur 570) BHL47163520.jpg"	S887	Q131478853
-Q5464243	P13162	"Atlas der baumarten von Java (Figur 571) BHL47163522.jpg"	S887	Q131478853

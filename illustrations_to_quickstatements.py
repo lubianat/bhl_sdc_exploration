@@ -2,10 +2,13 @@ import re
 import requests
 import csv
 from bs4 import BeautifulSoup
+from SPARQLWrapper import SPARQLWrapper, JSON
 
 # Base URLs
 COMMONS_API = "https://commons.wikimedia.org/w/api.php"
 WIKIDATA_API = "https://www.wikidata.org/w/api.php"
+# SPARQL endpoint for querying Wikidata
+SPARQL_ENDPOINT = "https://query.wikidata.org/sparql"
 
 # Initialize logs and outputs
 quickstatements_1 = []
@@ -14,7 +17,7 @@ manual_log = []
 log_2_files = []
 
 # Fetch subcategories from Commons
-category = "Saurauia_-_botanical_illustrations"
+category = "Acanthus_-_botanical_illustrations"
 def get_subcategories(category):
     params = {
         "action": "query",
@@ -87,11 +90,51 @@ def fetch_m_id(filename):
             return f"M{page_data['pageid']}"
     return None
 
-# Extend QuickStatements generation for Wikimedia Commons
-commons_quickstatements = []
 
+
+# Check for P18 (image) values in batch
+def check_missing_p18(wikidata_ids):
+    sparql = SPARQLWrapper(SPARQL_ENDPOINT)
+    ids_str = " ".join(f"wd:{qid}" for qid in wikidata_ids)
+    query = f"""
+    SELECT ?item WHERE {{
+        VALUES ?item {{ {ids_str} }}
+        FILTER NOT EXISTS {{ ?item wdt:P18 ?image }}
+    }}
+    """
+    sparql.setQuery(query)
+    sparql.setReturnFormat(JSON)
+    results = sparql.query().convert()
+
+    missing_p18 = set()
+    for result in results["results"]["bindings"]:
+        missing_p18.add(result["item"]["value"].split("/")[-1])  # Extract QID
+    return missing_p18
+
+# Processing subcategories
+wikidata_ids = []
+subcategories = get_subcategories(category)
 for subcat in subcategories:
     match = re.match(r"Category:(Saurauia [^\\-]+) - botanical illustrations", subcat)
+    if not match:
+        continue
+
+    species_name = match.group(1)
+    file_count = get_file_count(subcat)
+
+    wikidata_item = fetch_wikidata_item(species_name)
+    if wikidata_item:
+        wikidata_ids.append(wikidata_item)
+
+# Check which items are missing P18
+missing_p18_ids = check_missing_p18(wikidata_ids)
+
+# Extend QuickStatements generation
+commons_quickstatements = []
+p18_quickstatements = []
+
+for subcat in subcategories:
+    match = re.match(r"Category:([^\\-]+) - botanical illustrations", subcat)
     if not match:
         continue
 
@@ -109,10 +152,16 @@ for subcat in subcategories:
             if m_id:
                 # Create QuickStatements for Commons structured data
                 commons_quickstatements.append(
-                    f"{m_id}\tP180\t{wikidata_item}\tS887\tQ131478853"
+                    f"{m_id}\tP180\t{wikidata_item}\tS887\tQ131478853\n"
                 )
 
-    # Handle QuickStatements for Wikidata
+        # Add P18 if missing
+        if wikidata_item in missing_p18_ids and file_count == 1:
+            p18_quickstatements.append(
+                f"{wikidata_item}\tP18\t\"{files[0]}\"\n"
+            )
+
+    # Handle QuickStatements for Wikidata reference illustration
     if file_count == 1 and files:
         quickstatements_1.append(
             f"{wikidata_item}\tP13162\t\"{files[0]}\"\tS887\tQ131478853\n"
@@ -124,12 +173,17 @@ for subcat in subcategories:
         )
         log_2_files.append(subcat)
     else:
-        manual_log.append(subcat)
+        manual_log.append("https://commons.wikimedia.org/wiki/" + subcat+"\n")
 
 # Save QuickStatements for Wikimedia Commons
 with open("commons_quickstatements.txt", "w") as f:
     for statement in commons_quickstatements:
-        f.write(statement + "\n")
+        f.write(statement)
+
+# Save QuickStatements for P18
+with open("p18_quickstatements.txt", "w") as f:
+    for statement in p18_quickstatements:
+        f.write(statement)
 
 # Save other QuickStatements and logs
 with open("quickstatements_1.txt", "w") as f:
