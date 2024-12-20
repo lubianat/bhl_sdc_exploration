@@ -1,3 +1,5 @@
-Q15337405	P13162	"Acanthus arboreus johnston.jpg"	S887	Q131478853
-Q15339205	P13162	"Luigi Balugani - Acanthus Sennii Chiov , finished drawing with added details - B1977.14.9099 - Yale Center for British Art.jpg"	S887	Q131478853
-Q4672078	P13162	"Hortus Eystettensis, 1640 (BHL 45339 293) - Classis Aestiva 141.jpg"	S887	Q131478853
+Q17564800	P13162	"Annals of natural history (18226028760).jpg"	S887	Q131478853
+Q17565405	P13162	"A hand-book to the flora of Ceylon (Plate VI) (6430632811).jpg"	S887	Q131478853
+Q17386011	P13162	"Guthriea capensis00.jpg"	S887	Q131478853
+Q5625192	P13162	"Gynocardia odorata Roxburgh.jpg"	S887	Q131478853
+None	P13162	"Illustrations of Indian Botany, Vol. 1 (page 99 crop).jpg"	S887	Q131478853
