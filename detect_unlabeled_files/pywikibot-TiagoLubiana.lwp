@@ -1,0 +1,13 @@
+#LWP-Cookies-2.0
+Set-Cookie3: WMF-Last-Access="25-Dec-2024"; path="/"; domain="commons.wikimedia.org"; path_spec; secure; expires="2025-01-26 12:00:00Z"; HttpOnly=None; version=0
+Set-Cookie3: NetworkProbeLimit="0.001"; path="/"; domain="commons.wikimedia.org"; path_spec; secure; expires="2024-12-25 14:17:29Z"; SameSite=Lax; version=0
+Set-Cookie3: commonswikiSession=r00pfbkk8b2493bllv8d49ff3vlagvdu; path="/"; domain="commons.wikimedia.org"; path_spec; secure; discard; HttpOnly=None; SameSite=None; version=0
+Set-Cookie3: cpPosIndex="4%401735132673%2391f302694632801a8a988c9a89c71481"; path="/"; domain="commons.wikimedia.org"; path_spec; secure; expires="2024-12-25 13:18:03Z"; HttpOnly=None; version=0
+Set-Cookie3: UseDC=master; path="/"; domain="commons.wikimedia.org"; path_spec; secure; expires="2024-12-25 13:18:03Z"; HttpOnly=None; version=0
+Set-Cookie3: commonswikiUserID=3899251; path="/"; domain="commons.wikimedia.org"; path_spec; secure; expires="2025-12-25 13:17:53Z"; HttpOnly=None; SameSite=None; version=0
+Set-Cookie3: commonswikiUserName=TiagoLubiana; path="/"; domain="commons.wikimedia.org"; path_spec; secure; expires="2025-12-25 13:17:53Z"; HttpOnly=None; SameSite=None; version=0
+Set-Cookie3: centralauth_User=TiagoLubiana; path="/"; domain="commons.wikimedia.org"; path_spec; secure; expires="2025-12-25 13:17:53Z"; HttpOnly=None; SameSite=None; version=0
+Set-Cookie3: centralauth_Token=00c21e6f5b9edd826f6e53e24beee5d1; path="/"; domain="commons.wikimedia.org"; path_spec; secure; expires="2025-12-25 13:17:53Z"; HttpOnly=None; SameSite=None; version=0
+Set-Cookie3: centralauth_Session=44896053524d51c3bbc13028a3f39edc; path="/"; domain="commons.wikimedia.org"; path_spec; secure; discard; HttpOnly=None; SameSite=None; version=0
+Set-Cookie3: loginnotify_prevlogins="2024-1nxdm9t-iqvp4am667cq6i9vjr19pby3k5vjnn4"; path="/"; domain="commons.wikimedia.org"; path_spec; secure; expires="2025-06-23 13:17:53Z"; HttpOnly=None; version=0
+Set-Cookie3: GeoIP="BR:ES:Governador_Lindenberg:-19.26:-40.46:v4"; path="/"; domain=".wikimedia.org"; path_spec; domain_dot; secure; discard; version=0
