@@ -5,6 +5,8 @@ import pywikibot
 import yaml
 import sys
 import os
+import pathlib
+HERE = pathlib.Path(__file__).parent
 
 TEMPLATE = "{{Biodiversity Heritage Library}}"
 
@@ -46,8 +48,6 @@ def add_bhl_template_if_missing(page_title, site):
 def main():
     # Make sure we have pywikibot configured for Wikimedia Commons
     site = pywikibot.Site('commons', 'commons')
-    import pathlib
-    HERE = pathlib.Path(__file__).parent
     # Path to your YAML file"./biodivlibrary_results.yaml"
     yaml_file = HERE / "biodivlibrary_results.yaml"
     

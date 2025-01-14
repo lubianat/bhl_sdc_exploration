@@ -15,9 +15,7 @@ HEADERS = {
     "User-Agent": "MyBHLSearchBot/1.0 (tiagolubiana@gmail.com)"
 }
 
-CONTINUE_CACHE_FILE = "continue_cache.yaml"
-
-
+CONTINUE_CACHE_FILE = "continue_cache.yaml"                         
 
 def fetch_and_filter_files(base_url,
                            bhl_output_file="biodivlibrary_results.yaml",
