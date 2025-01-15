@@ -25,13 +25,13 @@ wbi_config['SPARQL_ENDPOINT_URL'] = 'https://query.wikidata.org/sparql'
 wbi_config['WIKIBASE_URL'] = 'https://commons.wikimedia.org'
 
 # Set a custom user agent (important if editing Wikimedia projects)
-wbi_config['USER_AGENT'] = 'MySDCBot/1.0 (https://commons.wikimedia.org/wiki/User:MyBotAccount)'
+wbi_config['USER_AGENT'] = 'TiagoLubiana (https://meta.wikimedia.org/wiki/User:TiagoLubiana)'
 
 
 def generate_custom_edit_summary():
     # As per https://www.wikidata.org/wiki/Wikidata:Edit_groups/Adding_a_tool
     random_hex = f"{random.randrange(0, 2**48):x}"
-    return f"SDC import from TSV ([[:toolforge:editgroups/b/CB/{random_hex}|details]])"
+    return f"SDC import (BHL Model v0.1.1, manual curation) ([[:toolforge:editgroups-commons/b/CB/{random_hex}|details]])"
 
 def get_media_info_id(file_name):
     """
@@ -92,7 +92,7 @@ def main(csv_path):
     )
     wbi = WikibaseIntegrator(login=login_instance)
 
-    # 2) Read the TSV file
+    edit_summary = generate_custom_edit_summary() 
     with open(csv_path, mode='r', encoding='utf-8-sig') as f:
         reader = csv.DictReader(f, delimiter='\t')
         for row in reader:
@@ -100,12 +100,7 @@ def main(csv_path):
             if not file_name:
                 logging.warning("Skipping row with empty 'File' column.")
                 continue
-            
-            edit_summary = generate_custom_edit_summary()
-            
-            # Attempt to retrieve the MediaInfo entity by "File:<filename>".
-            # If the file does not exist on Commons, this will raise an exception.
-            # Optionally, you could handle that case gracefully.
+        
             try:
                 data = get_media_info_id(file_name)
                 mediainfo_id = data
@@ -204,6 +199,8 @@ def main(csv_path):
                 claim_sponsor = Item(
                     prop_nr="P859",
                     value=sponsor,
+                    qualifiers=qualifiers,
+
                     references=references
                 )
                 new_statements.append(claim_sponsor)
@@ -284,7 +281,6 @@ def main(csv_path):
             # 4) Add new statements to the media info entity
             if new_statements:
                 media.claims.add(new_statements)
-
                 # 5) Write to Commons with a custom edit summary (including an EditGroups link)
                 try:
                     media.write(summary=edit_summary)
@@ -296,4 +292,4 @@ def main(csv_path):
 
 
 if __name__ == "__main__":
-    main("/home/lubianat/Documents/wiki_related/bhl_sdc_exploration/reconciliation_bot/test.tsv")
+    main("/home/lubianat/Documents/wiki_related/bhl_sdc_exploration/reconciliation_bot/test2.tsv")
