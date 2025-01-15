@@ -31,7 +31,8 @@ wbi_config['USER_AGENT'] = 'TiagoLubiana (https://meta.wikimedia.org/wiki/User:T
 def generate_custom_edit_summary():
     # As per https://www.wikidata.org/wiki/Wikidata:Edit_groups/Adding_a_tool
     random_hex = f"{random.randrange(0, 2**48):x}"
-    return f"SDC import (BHL Model v0.1.1, manual curation) ([[:toolforge:editgroups-commons/b/CB/{random_hex}|details]])"
+    " ([[:toolforge:editgroups-commons/b/CB/{random_hex}|details]])"
+    return f"SDC import (BHL Model v0.1.1, manual curation - tests)"
 
 def get_media_info_id(file_name):
     """
@@ -80,23 +81,28 @@ def get_media_info_id(file_name):
     except requests.RequestException as e:
         return f"Error: API request failed. {e}"
 
-def main(csv_path):
-    # Set up logging for debug
-    logging.basicConfig(level=logging.INFO)
 
-    # 1) Login
+def is_claim_present(existing_claims, new_claim):
+    for existing_claim in existing_claims:
+        # Use the `equals` method to check if the claim is identical
+        if existing_claim.equals(new_claim):
+            return True
+    return False
+
+
+def main(csv_path):
+    logging.basicConfig(level=logging.INFO)
     login_instance = wbi_login.Login(
         user=USERNAME,
         password=PASSWORD,
         mediawiki_api_url=wbi_config['MEDIAWIKI_API_URL']
     )
     wbi = WikibaseIntegrator(login=login_instance)
-
     edit_summary = generate_custom_edit_summary() 
     with open(csv_path, mode='r', encoding='utf-8-sig') as f:
         reader = csv.DictReader(f, delimiter='\t')
         for row in reader:
-            file_name = row.get("File", "").strip()  # e.g. "Example.jpg"
+            file_name = row.get("File", "").strip()
             if not file_name:
                 logging.warning("Skipping row with empty 'File' column.")
                 continue
@@ -105,28 +111,34 @@ def main(csv_path):
                 data = get_media_info_id(file_name)
                 mediainfo_id = data
                 media = wbi.mediainfo.get(entity_id=mediainfo_id)
+                existing_claims = media.claims
+                print(media.claims)
             except Exception as e:
                 logging.error(f"Could not load MediaInfo for File:{file_name}: {e}")
                 continue
 
-            # We'll store all new statements in a list, then media.claims.add(...) them.
             new_statements = []
-
-            # 3) Build statements from columns
-
-            # P31 = instance of
+            instance_of_dict = {
+                "Illustration": "Q178659",
+            }
             instance_of = row.get("Instance of", "").strip()
             if instance_of:
+                if instance_of in instance_of_dict:
+                    instance_of = instance_of_dict[instance_of]
                 claim_instance_of = Item(
                     prop_nr="P31",
                     value=instance_of
                 )
-                new_statements.append(claim_instance_of)
+                if not is_claim_present(existing_claims, claim_instance_of):
+                    new_statements.append(claim_instance_of)
+                else:
+                    logging.info(f"Claim P31:{instance_of} already exists for {file_name}, skipping...")
+                    continue
+                    # Workaround to avoid editing files that have been edited already. 
 
             # P1433 = published in
-            published_in = row.get("Published In", "").strip()
+            published_in = row.get("Published In QID", "").strip()
             if published_in:
-                # with qualifier P518 = Q112134971
                 qual_p518 = datatypes.Item(
                     prop_nr="P518",
                     value="Q112134971"  # "analog work"
@@ -144,7 +156,9 @@ def main(csv_path):
             # P195 = collection
             institutions_dict = {
                 "Smithsonian Libraries and Archives": "Q1609326",
-                "Smithsonian Institution": "Q131626"
+                "Smithsonian Institution": "Q131626",
+                "Missouri Botanical Garden, Peter H. Raven Library": "Q53530601",
+                "Missouri Botanical Garden": "Q1852803"
             }
             collection = row.get("Collection", "").strip()
             if collection:
@@ -163,7 +177,7 @@ def main(csv_path):
                 references = References()
                 if bib_id:
                     ref_obj = Reference()
-                    ref_obj.add(datatypes.URL(prop_nr="P854", value=bib_id))
+                    ref_obj.add(datatypes.URL(prop_nr="P854", value=f"https://www.biodiversitylibrary.org/bibliography/{bib_id}"                                        ))
                     references.add(ref_obj)
 
                 claim_collection = Item(
@@ -193,7 +207,7 @@ def main(csv_path):
 
                 if bib_id:
                     ref_obj = Reference()
-                    ref_obj.add(datatypes.URL(prop_nr="P854", value=bib_id))
+                    ref_obj.add(datatypes.URL(prop_nr="P854", value=f"https://www.biodiversitylibrary.org/bibliography/{bib_id}"                                        ))
                     references.add(ref_obj)
 
                 claim_sponsor = Item(
@@ -241,8 +255,11 @@ def main(csv_path):
             # references: P887 = Q110393725 ("inferred from publication date")
             inception_str = row.get("Inception", "").strip()
             if inception_str:
-                # Inception is a year, e.g., "1900"
+                # Inception should be a year, e.g., "1900"
                 # 9 is the precision for year
+                if len(inception_str) != 4:
+                    # Get first 4 
+                    inception_str = inception_str[:4]
                 formatted_string = f"+{inception_str}-01-01T00:00:00Z"
                 claim_inception = Time(
                     prop_nr="P571",
@@ -280,7 +297,7 @@ def main(csv_path):
 
             # 4) Add new statements to the media info entity
             if new_statements:
-                media.claims.add(new_statements)
+                media.claims.add(new_statements, action_if_exists= wbi_enums.ActionIfExists.FORCE_APPEND)
                 # 5) Write to Commons with a custom edit summary (including an EditGroups link)
                 try:
                     media.write(summary=edit_summary)
@@ -292,4 +309,4 @@ def main(csv_path):
 
 
 if __name__ == "__main__":
-    main("/home/lubianat/Documents/wiki_related/bhl_sdc_exploration/reconciliation_bot/test2.tsv")
+    main("/home/lubianat/Documents/wiki_related/bhl_sdc_exploration/reconciliation_bot/Beitrag_zur_Flora_Brasiliens.tsv")
