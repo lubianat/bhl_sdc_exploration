@@ -1,25 +1,17 @@
 import csv
-import random
 import logging
-
 from wikibaseintegrator import wbi_login, WikibaseIntegrator, wbi_enums
 from wikibaseintegrator.wbi_config import config as wbi_config
-from wikibaseintegrator import datatypes
 from wikibaseintegrator.models import Qualifiers, References, Reference
-
-# Data type helpers
 from wikibaseintegrator.datatypes import (
     Item,
     ExternalID,
-    Time
+    Time,
+    URL
 )
 from login import *
-import requests
+from helper import get_media_info_id, generate_custom_edit_summary
 
-# -------------------------------------------------------------------
-# CONFIGURATION
-# -------------------------------------------------------------------
-# Point these at Wikimedia Commons if needed:
 wbi_config['MEDIAWIKI_API_URL'] = 'https://commons.wikimedia.org/w/api.php'
 wbi_config['SPARQL_ENDPOINT_URL'] = 'https://query.wikidata.org/sparql'
 wbi_config['WIKIBASE_URL'] = 'https://commons.wikimedia.org'
@@ -27,78 +19,30 @@ wbi_config['WIKIBASE_URL'] = 'https://commons.wikimedia.org'
 # Set a custom user agent (important if editing Wikimedia projects)
 wbi_config['USER_AGENT'] = 'TiagoLubiana (https://meta.wikimedia.org/wiki/User:TiagoLubiana)'
 
+INSTANCE_OF_DICT = {
+    "Illustration": "Q178659",
+}
+INSTITUTIONS_DICT = {
+    "Smithsonian Libraries and Archives": "Q1609326",
+    "Smithsonian Institution": "Q131626",
+    "Missouri Botanical Garden, Peter H. Raven Library": "Q53530601",
+    "Missouri Botanical Garden": "Q1852803"
+}
 
-def generate_custom_edit_summary():
-    # As per https://www.wikidata.org/wiki/Wikidata:Edit_groups/Adding_a_tool
-    random_hex = f"{random.randrange(0, 2**48):x}"
-    " ([[:toolforge:editgroups-commons/b/CB/{random_hex}|details]])"
-    return f"SDC import (BHL Model v0.1.1, manual curation - tests)"
-
-def get_media_info_id(file_name):
-    """
-    Extract the MediaInfo ID (M-ID) for a given Wikimedia Commons file name.
-
-    Args:
-        file_name (str): The name of the file on Wikimedia Commons.
-
-    Returns:
-        str: The MediaInfo ID (e.g., 'M12345') if found, or an error message.
-    """
-    # Base URL for MediaWiki API
-    API_URL = "https://commons.wikimedia.org/w/api.php"
-
-    if "File:" in file_name:
-        file_name = file_name.replace("File:", "")
-    # Prepare the request parameters
-    params = {
-        "action": "query",
-        "titles": f"File:{file_name}",
-        "prop": "info",
-        "format": "json"
-    }
-
-    try:
-        # Make the API request
-        response = requests.get(API_URL, params=params)
-        response.raise_for_status()
-        data = response.json()
-
-        # Extract the page data
-        pages = data.get("query", {}).get("pages", {})
-        if not pages:
-            return "Error: No page data found for the file."
-
-        # Get the first (and only) page in the response
-        page = next(iter(pages.values()))
-
-        # Extract the MediaInfo ID using the pageid
-        if "pageid" in page:
-            media_info_id = f"M{page['pageid']}"
-            return media_info_id
-        else:
-            return "Error: MediaInfo ID could not be found for the file."
-
-    except requests.RequestException as e:
-        return f"Error: API request failed. {e}"
-
-
-def is_claim_present(existing_claims, new_claim):
-    for existing_claim in existing_claims:
-        # Use the `equals` method to check if the claim is identical
-        if existing_claim.equals(new_claim):
-            return True
-    return False
-
+TEST=False
 
 def main(csv_path):
+
     logging.basicConfig(level=logging.INFO)
+
     login_instance = wbi_login.Login(
         user=USERNAME,
         password=PASSWORD,
         mediawiki_api_url=wbi_config['MEDIAWIKI_API_URL']
     )
     wbi = WikibaseIntegrator(login=login_instance)
-    edit_summary = generate_custom_edit_summary() 
+    edit_summary = generate_custom_edit_summary(test_edit=TEST) 
+
     with open(csv_path, mode='r', encoding='utf-8-sig') as f:
         reader = csv.DictReader(f, delimiter='\t')
         for row in reader:
@@ -111,194 +55,21 @@ def main(csv_path):
                 data = get_media_info_id(file_name)
                 mediainfo_id = data
                 media = wbi.mediainfo.get(entity_id=mediainfo_id)
-                existing_claims = media.claims
-                print(media.claims)
             except Exception as e:
                 logging.error(f"Could not load MediaInfo for File:{file_name}: {e}")
                 continue
 
             new_statements = []
-            instance_of_dict = {
-                "Illustration": "Q178659",
-            }
-            instance_of = row.get("Instance of", "").strip()
-            if instance_of:
-                if instance_of in instance_of_dict:
-                    instance_of = instance_of_dict[instance_of]
-                claim_instance_of = Item(
-                    prop_nr="P31",
-                    value=instance_of
-                )
-                if not is_claim_present(existing_claims, claim_instance_of):
-                    new_statements.append(claim_instance_of)
-                else:
-                    logging.info(f"Claim P31:{instance_of} already exists for {file_name}, skipping...")
-                    continue
-                    # Workaround to avoid editing files that have been edited already. 
+            add_instance_claim(row, new_statements)
+            add_published_in_claim(row, new_statements)
+            add_collection_claim(row, new_statements)
+            add_digital_sponsor_claim(row, new_statements)
+            add_bhl_id_claim(row, new_statements)
+            add_illustrator_claim(row, new_statements)
+            add_inception_claim(row, new_statements)
 
-            # P1433 = published in
-            published_in = row.get("Published In QID", "").strip()
-            if published_in:
-                qual_p518 = datatypes.Item(
-                    prop_nr="P518",
-                    value="Q112134971"  # "analog work"
-                )
-                qualifiers = Qualifiers()
-                qualifiers.add(qual_p518)
-
-                claim_published_in = Item(
-                    prop_nr="P1433",
-                    value=published_in,
-                    qualifiers=qualifiers
-                )
-                new_statements.append(claim_published_in)
-
-            # P195 = collection
-            institutions_dict = {
-                "Smithsonian Libraries and Archives": "Q1609326",
-                "Smithsonian Institution": "Q131626",
-                "Missouri Botanical Garden, Peter H. Raven Library": "Q53530601",
-                "Missouri Botanical Garden": "Q1852803"
-            }
-            collection = row.get("Collection", "").strip()
-            if collection:
-                if collection in institutions_dict:
-                    collection = institutions_dict[collection]
-                # qualifier P3831 = Q131597993 (holding institution)
-                qual_p3831 = datatypes.Item(
-                    prop_nr="P3831",
-                    value="Q131597993"  # "holding institution"
-                )
-                qualifiers = Qualifiers()
-                qualifiers.add(qual_p3831)
-
-                # reference: P854 = row["Bibliography ID"]
-                bib_id = row.get("Bibliography ID", "").strip()
-                references = References()
-                if bib_id:
-                    ref_obj = Reference()
-                    ref_obj.add(datatypes.URL(prop_nr="P854", value=f"https://www.biodiversitylibrary.org/bibliography/{bib_id}"                                        ))
-                    references.add(ref_obj)
-
-                claim_collection = Item(
-                    prop_nr="P195",
-                    value=collection,
-                    qualifiers=qualifiers,
-                    references=references
-                )
-                new_statements.append(claim_collection)
-
-            # P859 = sponsor
-            sponsor = row.get("Sponsor", "").strip()
-            if sponsor:
-                if sponsor in institutions_dict:
-                    sponsor = institutions_dict[sponsor]
-
-                qual_p3831 = datatypes.Item(
-                    prop_nr="P3831",
-                    value="Q131344184"  # digitization sponsor
-                )
-                qualifiers = Qualifiers()
-                qualifiers.add(qual_p3831)
-
-                references = References()
-                bib_id = row.get("Bibliography ID", "").strip()
-
-
-                if bib_id:
-                    ref_obj = Reference()
-                    ref_obj.add(datatypes.URL(prop_nr="P854", value=f"https://www.biodiversitylibrary.org/bibliography/{bib_id}"                                        ))
-                    references.add(ref_obj)
-
-                claim_sponsor = Item(
-                    prop_nr="P859",
-                    value=sponsor,
-                    qualifiers=qualifiers,
-
-                    references=references
-                )
-                new_statements.append(claim_sponsor)
-
-            # P687 = BHL page ID (external-id)
-            bhl_page_id = row.get("BHL Page ID", "").strip()
-            if bhl_page_id:
-                claim_bhl = ExternalID(
-                    prop_nr="P687",
-                    value=bhl_page_id
-                )
-                new_statements.append(claim_bhl)
-
-            # P170 = creator (illustrator)
-            illustrator = row.get("Illustrator", "").strip()
-            if illustrator:
-                qual_p3831 = datatypes.Item(
-                    prop_nr="P3831",
-                    value="Q644687"  # "illustrator"
-                )
-                qual_p518 = datatypes.Item(
-                    prop_nr="P518",
-                    value="Q112134971"  # "analog work"
-                )
-                qualifiers = Qualifiers()
-                qualifiers.add(qual_p518)
-                qualifiers.add(qual_p3831)
-
-                claim_creator = Item(
-                    prop_nr="P170",
-                    value=illustrator,
-                    qualifiers=qualifiers
-                )
-                new_statements.append(claim_creator)
-
-            # P571 = inception (time)
-            # plus qualifiers P1480 = Q110290992 ("no later than") and P518 = Q112134971
-            # references: P887 = Q110393725 ("inferred from publication date")
-            inception_str = row.get("Inception", "").strip()
-            if inception_str:
-                # Inception should be a year, e.g., "1900"
-                # 9 is the precision for year
-                if len(inception_str) != 4:
-                    # Get first 4 
-                    inception_str = inception_str[:4]
-                formatted_string = f"+{inception_str}-01-01T00:00:00Z"
-                claim_inception = Time(
-                    prop_nr="P571",
-                    time=formatted_string,
-                    precision=wbi_enums.WikibaseTimePrecision.YEAR
-                )
-                qualifiers = Qualifiers()
-                qualifiers.add(
-                    datatypes.Item(
-                        prop_nr="P1480",
-                        value="Q110290992"  # "no later than"
-                    )
-                )
-                qualifiers.add(
-                    datatypes.Item(
-                        prop_nr="P518",
-                        value="Q112134971"  # "analog work"
-                    )
-                )
-                claim_inception.qualifiers = qualifiers
-
-                # reference: P887 = Q110393725 ("inferred from publication date")
-                references = References()
-                ref_obj = Reference()
-                ref_obj.add(
-                    datatypes.Item(
-                        prop_nr="P887",
-                        value="Q110393725"
-                    )
-                )
-                references.add(ref_obj)
-
-                claim_inception.references = references
-                new_statements.append(claim_inception)
-
-            # 4) Add new statements to the media info entity
             if new_statements:
-                media.claims.add(new_statements, action_if_exists= wbi_enums.ActionIfExists.FORCE_APPEND)
-                # 5) Write to Commons with a custom edit summary (including an EditGroups link)
+                media.claims.add(new_statements, action_if_exists= wbi_enums.ActionIfExists.MERGE_REFS_OR_APPEND)
                 try:
                     media.write(summary=edit_summary)
                     logging.info(f"Successfully updated {file_name} with SDC data.")
@@ -307,6 +78,158 @@ def main(csv_path):
             else:
                 logging.info(f"No SDC data to add for {file_name}, skipping...")
 
+
+def add_inception_claim(row, new_statements):
+    inception_str = row.get("Inception", "").strip()
+    if inception_str:
+                # Inception should be a year, e.g., "1900"
+                # 9 is the precision for year
+        if len(inception_str) != 4:
+                    # Get first 4 
+            inception_str = inception_str[:4]
+        formatted_string = f"+{inception_str}-01-01T00:00:00Z"
+        claim_inception = Time(
+                    prop_nr="P571",
+                    time=formatted_string,
+                    precision=wbi_enums.WikibaseTimePrecision.YEAR
+                )
+        qualifiers = Qualifiers()
+        qualifiers.add(
+                    Item(
+                        prop_nr="P1480",
+                        value="Q110290992"  # "no later than"
+                    )
+                )
+        qualifiers.add(
+                    Item(
+                        prop_nr="P518",
+                        value="Q112134971"  # "analog work"
+                    )
+                )
+        claim_inception.qualifiers = qualifiers
+                # reference: P887 = Q110393725 ("inferred from publication date")
+        references = References()
+        ref_obj = Reference()
+        ref_obj.add(
+                    Item(
+                        prop_nr="P887",
+                        value="Q110393725"
+                    )
+                )
+        references.add(ref_obj)
+        claim_inception.references = references
+        new_statements.append(claim_inception)
+
+def add_illustrator_claim(row, new_statements):
+    illustrator = row.get("Illustrator", "").strip()
+    if illustrator:
+        qual_p3831 = Item(
+                    prop_nr="P3831",
+                    value="Q644687"  # "illustrator"
+                )
+        qual_p518 = Item(
+                    prop_nr="P518",
+                    value="Q112134971"  # "analog work"
+                )
+        qualifiers = Qualifiers()
+        qualifiers.add(qual_p518)
+        qualifiers.add(qual_p3831)
+
+        claim_creator = Item(
+                    prop_nr="P170",
+                    value=illustrator,
+                    qualifiers=qualifiers
+                )
+        new_statements.append(claim_creator)
+
+def add_bhl_id_claim(row, new_statements):
+    bhl_page_id = row.get("BHL Page ID", "").strip()
+    if bhl_page_id:
+        claim_bhl = ExternalID(
+                    prop_nr="P687",
+                    value=bhl_page_id
+                )
+        new_statements.append(claim_bhl)
+
+def add_digital_sponsor_claim(row, new_statements):
+    sponsor = row.get("Sponsor", "").strip()
+            
+    if sponsor:
+        if sponsor in INSTITUTIONS_DICT:
+            sponsor = INSTITUTIONS_DICT[sponsor]
+        qual_p3831 = Item(
+                    prop_nr="P3831",
+                    value="Q131344184"  # digitization sponsor
+                )
+        qualifiers = Qualifiers()
+        qualifiers.add(qual_p3831)
+        references = References()
+        bib_id = row.get("Bibliography ID", "").strip()
+        if bib_id:
+            ref_obj = Reference()
+            ref_obj.add(URL(prop_nr="P854", value=f"https://www.biodiversitylibrary.org/bibliography/{bib_id}"                                        ))
+            references.add(ref_obj)
+        claim_sponsor = Item(
+                    prop_nr="P859",
+                    value=sponsor,
+                    qualifiers=qualifiers,
+                    references=references
+                )
+        new_statements.append(claim_sponsor)
+
+def add_collection_claim(row, new_statements):
+    collection = row.get("Collection", "").strip()
+    if collection:
+        if collection in INSTITUTIONS_DICT:
+            collection = INSTITUTIONS_DICT[collection]
+        qual_p3831 = Item(
+                    prop_nr="P3831",
+                    value="Q131597993"  # "holding institution"
+                )
+        qualifiers = Qualifiers()
+        qualifiers.add(qual_p3831)
+        bib_id = row.get("Bibliography ID", "").strip()
+        references = References()
+        if bib_id:
+            ref_obj = Reference()
+            ref_obj.add(URL(prop_nr="P854", value=f"https://www.biodiversitylibrary.org/bibliography/{bib_id}"                                        ))
+            references.add(ref_obj)
+
+        claim_collection = Item(
+                    prop_nr="P195",
+                    value=collection,
+                    qualifiers=qualifiers,
+                    references=references
+                )
+        new_statements.append(claim_collection)
+
+def add_instance_claim(row, new_statements):
+    instance_of = row.get("Instance of", "").strip()
+    if instance_of:
+        if instance_of in INSTANCE_OF_DICT:
+            instance_of = INSTANCE_OF_DICT[instance_of]
+        claim_instance_of = Item(
+                    prop_nr="P31",
+                    value=instance_of
+                )
+        new_statements.append(claim_instance_of)
+
+def add_published_in_claim(row, new_statements):
+    published_in = row.get("Published In QID", "").strip()
+    if published_in:
+        qual_p518 = Item(
+                    prop_nr="P518",
+                    value="Q112134971"  # "analog work"
+                )
+        qualifiers = Qualifiers()
+        qualifiers.add(qual_p518)
+
+        claim_published_in = Item(
+                    prop_nr="P1433",
+                    value=published_in,
+                    qualifiers=qualifiers
+                )
+        new_statements.append(claim_published_in)
 
 if __name__ == "__main__":
     main("/home/lubianat/Documents/wiki_related/bhl_sdc_exploration/reconciliation_bot/Beitrag_zur_Flora_Brasiliens.tsv")

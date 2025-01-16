@@ -4,7 +4,6 @@ from pathlib import Path
 import pandas as pd
 from bs4 import BeautifulSoup
 
-# Config
 COMMONS_API_ENDPOINT = "https://commons.wikimedia.org/w/api.php"
 WIKIDATA_SPARQL_ENDPOINT = "https://query.wikidata.org/sparql"
 BHL_BASE_URL = "https://www.biodiversitylibrary.org"
