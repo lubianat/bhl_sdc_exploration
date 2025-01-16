@@ -7,7 +7,7 @@ def generate_custom_edit_summary(test_edit=False):
     random_hex = f"{random.randrange(0, 2**48):x}"
     editgroup_snippet = f"([[:toolforge:editgroups-commons/b/CB/{random_hex}|details]])"
     if test_edit:
-         return f"SDC import (BHL Model v0.1.1, manual curation - tests)"
+         return f"SDC import (BHL Model v0.1.1, manual curation - tests - Patch to WikibaseIntegrator)"
     else:
         return f"SDC import (BHL Model v0.1.1, manual curation) {editgroup_snippet}"
     

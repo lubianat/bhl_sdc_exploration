@@ -29,7 +29,7 @@ INSTITUTIONS_DICT = {
     "Missouri Botanical Garden": "Q1852803"
 }
 
-TEST=False
+TEST=True
 
 def main(csv_path):
 
@@ -69,10 +69,11 @@ def main(csv_path):
             add_inception_claim(row, new_statements)
 
             if new_statements:
+                print(media.claims)
                 media.claims.add(new_statements, action_if_exists= wbi_enums.ActionIfExists.MERGE_REFS_OR_APPEND)
                 try:
                     media.write(summary=edit_summary)
-                    logging.info(f"Successfully updated {file_name} with SDC data.")
+                    logging.info(f"No errors when trying to update {file_name} with SDC data.")
                 except Exception as e:
                     logging.error(f"Failed to write SDC for {file_name}: {e}")
             else:
