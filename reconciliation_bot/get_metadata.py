@@ -3,14 +3,15 @@ import re
 from pathlib import Path
 import pandas as pd
 from bs4 import BeautifulSoup
+from tqdm import tqdm
 
 COMMONS_API_ENDPOINT = "https://commons.wikimedia.org/w/api.php"
 WIKIDATA_SPARQL_ENDPOINT = "https://query.wikidata.org/sparql"
 BHL_BASE_URL = "https://www.biodiversitylibrary.org"
 
 # Input category
-category_name = "Beitrag zur Flora Brasiliens"
-
+category_name = "Abbildungen zur Naturgeschichte Brasiliens"
+category_name = category_name.replace("_", " ").replace("Category:", "").strip()
 def get_files_in_category(category_name):
     params = {
         "action": "query",
@@ -50,12 +51,12 @@ def get_commons_wikitext(filename):
 
 def parse_bhl_template(wikitext):
     if not wikitext:
-        return {field: "" for field in ["pageid", "titleid", "pagetypes", "date", "author"]}
+        return {field: "" for field in ["pageid", "titleid", "pagetypes", "date", "author", "names"]}
     m = re.search(r'(?s)\{\{BHL\s*\|.*?\}\}', wikitext)
     if not m:
-        return {field: "" for field in ["pageid", "titleid", "pagetypes", "date", "author"]}
+        return {field: "" for field in ["pageid", "titleid", "pagetypes", "date", "author", "names"]}
     bhl_block = m.group(0)
-    field_names = ["pageid", "titleid", "pagetypes", "date", "author"]
+    field_names = ["pageid", "titleid", "pagetypes", "date", "author", "names"]
     results = {}
     for field in field_names:
         regex = r"\|\s*{}\s*=\s*(.*?)\n".format(field)
@@ -63,6 +64,16 @@ def parse_bhl_template(wikitext):
         if fm:
             value = fm.group(1).strip()
             value = re.sub(r"\}\}.*", "", value).strip()
+            if field == "names":
+             # Example: | names = NameFound:Dicholophus cristatus NameConfirmed:Dicholophus cristatus  
+             # Regex to get the scientific name after NameFound)
+                try:
+                    value = re.search(r"NameFound:([A-Za-z ]+)NameConfirmed", value).group(1)
+                except AttributeError:
+                    try:
+                     value = re.search(r"NameFound:([A-Za-z ]+)", value).group(1)
+                    except AttributeError:
+                        value = value
             results[field] = value
         else:
             results[field] = ""
@@ -112,7 +123,7 @@ def generate_data(category_name):
     rows = []
     
     url_printed = False
-    for file in files:
+    for file in tqdm(files):
         wikitext = get_commons_wikitext(file)
         bhl_data = parse_bhl_template(wikitext)
         instance_of = bhl_data["pagetypes"]
@@ -140,7 +151,8 @@ def generate_data(category_name):
             "Sponsor": sponsor or "",
             "Bibliography ID": biblio_id or "",
             "Illustrator": illustrator or "",
-            "Inception": inception_date or ""
+            "Inception": inception_date or "",
+            "Names": bhl_data["names"] or "",
         }
         rows.append(row)
     

@@ -25,11 +25,12 @@ INSTANCE_OF_DICT = {
 INSTITUTIONS_DICT = {
     "Smithsonian Libraries and Archives": "Q1609326",
     "Smithsonian Institution": "Q131626",
+    "Smithsonian Institution Libraries": "Q1609326",
     "Missouri Botanical Garden, Peter H. Raven Library": "Q53530601",
     "Missouri Botanical Garden": "Q1852803"
 }
 
-TEST=True
+TEST=False
 
 def main(csv_path):
 
@@ -47,6 +48,9 @@ def main(csv_path):
         reader = csv.DictReader(f, delimiter='\t')
         for row in reader:
             file_name = row.get("File", "").strip()
+            if ".pdf" in file_name:
+                logging.warning(f"Skipping row with PDF file: {file_name}")
+                continue
             if not file_name:
                 logging.warning("Skipping row with empty 'File' column.")
                 continue
@@ -66,6 +70,7 @@ def main(csv_path):
             add_digital_sponsor_claim(row, new_statements)
             add_bhl_id_claim(row, new_statements)
             add_illustrator_claim(row, new_statements)
+            add_depicts_claim(row, new_statements)
             add_inception_claim(row, new_statements)
 
             if new_statements:
@@ -79,6 +84,39 @@ def main(csv_path):
             else:
                 logging.info(f"No SDC data to add for {file_name}, skipping...")
 
+from wdcuration import query_wikidata
+
+def get_qid_from_taxon_name(taxon_name):
+    query = f"""
+    SELECT ?item WHERE {{
+        ?item wdt:P225 "{taxon_name}".
+    }}
+    """
+    result = query_wikidata(query)
+    if len(result) == 1:
+        return result[0]["item"].replace("http://www.wikidata.org/entity/", "")
+    return ""
+
+def add_depicts_claim(row, new_statements):
+    names = row.get("Names", "").strip()
+    if names:
+        qid = get_qid_from_taxon_name(names)
+        if qid:
+            claim_depicts = Item(
+                        prop_nr="P180",
+                        value=qid
+                    )
+            references = References()
+            ref_obj = Reference()
+            ref_obj.add(
+                        Item(
+                            prop_nr="P887",
+                            value="Q131783016"
+                        )
+                    )
+            references.add(ref_obj)
+            claim_depicts.references = references
+            new_statements.append(claim_depicts)
 
 def add_inception_claim(row, new_statements):
     inception_str = row.get("Inception", "").strip()
@@ -233,4 +271,4 @@ def add_published_in_claim(row, new_statements):
         new_statements.append(claim_published_in)
 
 if __name__ == "__main__":
-    main("/home/lubianat/Documents/wiki_related/bhl_sdc_exploration/reconciliation_bot/Beitrag_zur_Flora_Brasiliens.tsv")
+    main("/home/lubianat/Documents/wiki_related/bhl_sdc_exploration/reconciliation_bot/Abbildungen_zur_Naturgeschichte_Brasiliens.tsv")
