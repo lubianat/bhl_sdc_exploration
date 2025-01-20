@@ -10,7 +10,7 @@ WIKIDATA_SPARQL_ENDPOINT = "https://query.wikidata.org/sparql"
 BHL_BASE_URL = "https://www.biodiversitylibrary.org"
 
 # Input category
-category_name = "Abbildungen zur Naturgeschichte Brasiliens"
+category_name = "Historia Naturalis Brasiliae"
 category_name = category_name.replace("_", " ").replace("Category:", "").strip()
 def get_files_in_category(category_name):
     params = {
@@ -81,7 +81,7 @@ def parse_bhl_template(wikitext):
 
 def find_publication_from_category(category_name):
     query = f"""
-    SELECT ?item ?itemLabel ?publicationDate
+    SELECT ?item ?itemLabel ?publicationDate ?bhl_bib_id
     WHERE
     {{
       ?item wdt:P373 "{category_name}" .
@@ -89,7 +89,6 @@ def find_publication_from_category(category_name):
       OPTIONAL {{ ?item wdt:P577 ?publicationDate. }}
       SERVICE wikibase:label {{ bd:serviceParam wikibase:language "en". }}
     }}
-    LIMIT 1
     """
     try:
         r = requests.get(
@@ -98,6 +97,9 @@ def find_publication_from_category(category_name):
         )
         data = r.json()
         results = data.get("results", {}).get("bindings", [])
+        if len(results) == 0 :
+            print(f"No BHL IDs found for category {category_name}.")
+            return "", "", ""
         if results:
             qid = results[0].get("item", {}).get("value", "").split("/")[-1]
             label = results[0].get("itemLabel", {}).get("value", "")
@@ -125,10 +127,13 @@ def generate_data(category_name):
     url_printed = False
     for file in tqdm(files):
         wikitext = get_commons_wikitext(file)
+        # SKIP non-BHL templated files
+        if "{{BHL" not in wikitext:
+            continue
         bhl_data = parse_bhl_template(wikitext)
         instance_of = bhl_data["pagetypes"]
         biblio_id = bhl_data["titleid"]
-
+        
         if not url_printed:
             bhl_url = f"{BHL_BASE_URL}/bibliography/{biblio_id}"
             print(f"Visit the BHL page for this category: {bhl_url}")
@@ -139,6 +144,8 @@ def generate_data(category_name):
                 collection = input("Enter the Collection (if not auto-detected): ").strip()
                 sponsor = input("Enter the Sponsor (if not auto-detected): ").strip()
             illustrator = input("Enter the Illustrator QID: ").strip()
+            engraver = input("Enter the Engraver QID: ").strip()
+
             url_printed = True
 
         row = {
