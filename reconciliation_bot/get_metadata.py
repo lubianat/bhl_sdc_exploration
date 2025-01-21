@@ -10,7 +10,10 @@ WIKIDATA_SPARQL_ENDPOINT = "https://query.wikidata.org/sparql"
 BHL_BASE_URL = "https://www.biodiversitylibrary.org"
 
 # Input category
-category_name = "Historia Naturalis Brasiliae"
+category_name = "Les bois indigènes de São Paulo"
+ILLUSTRATOR = "Q10340184"
+ENGRAVER = ""
+REF_URL_FOR_AUTHORS = ""
 category_name = category_name.replace("_", " ").replace("Category:", "").strip()
 def get_files_in_category(category_name):
     params = {
@@ -143,9 +146,18 @@ def generate_data(category_name):
             if not collection or not sponsor:
                 collection = input("Enter the Collection (if not auto-detected): ").strip()
                 sponsor = input("Enter the Sponsor (if not auto-detected): ").strip()
-            illustrator = input("Enter the Illustrator QID: ").strip()
-            engraver = input("Enter the Engraver QID: ").strip()
-
+            if ILLUSTRATOR != "":
+                illustrator = ILLUSTRATOR
+            else:
+                illustrator = input("Enter the Illustrator QID: ").strip()
+            if ENGRAVER != "":
+                engraver = ENGRAVER
+            else:
+                engraver = input("Enter the Engraver QID: ").strip()
+            if REF_URL_FOR_AUTHORS != "":
+                ref_url_for_authors = REF_URL_FOR_AUTHORS
+            else: 
+                ref_url_for_authors = input("Enter the Ref URL for the authors: ").strip()
             url_printed = True
 
         row = {
@@ -158,6 +170,8 @@ def generate_data(category_name):
             "Sponsor": sponsor or "",
             "Bibliography ID": biblio_id or "",
             "Illustrator": illustrator or "",
+            "Engraver": engraver or "",
+            "Ref URL for Authors": ref_url_for_authors or "",
             "Inception": inception_date or "",
             "Names": bhl_data["names"] or "",
         }

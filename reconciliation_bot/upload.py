@@ -1,3 +1,7 @@
+TEST=True
+CUSTOM_INSTANCE_OF=True
+CATEGORY="Les bois indigènes de São Paulo"
+SKIP_PUBLISHED_IN=True
 import csv
 import logging
 from wikibaseintegrator import wbi_login, WikibaseIntegrator, wbi_enums
@@ -21,16 +25,20 @@ wbi_config['USER_AGENT'] = 'TiagoLubiana (https://meta.wikimedia.org/wiki/User:T
 
 INSTANCE_OF_DICT = {
     "Illustration": "Q178659",
+    "Text Illustration": "Q131597974",
+    "Text Table of Contents": "Q1456936",
+    "Title Page Text Illustration": "Q1339862"
 }
 INSTITUTIONS_DICT = {
     "Smithsonian Libraries and Archives": "Q1609326",
     "Smithsonian Institution": "Q131626",
     "Smithsonian Institution Libraries": "Q1609326",
     "Missouri Botanical Garden, Peter H. Raven Library": "Q53530601",
-    "Missouri Botanical Garden": "Q1852803"
+    "Missouri Botanical Garden": "Q1852803",
+    "New York Botanical Garden, LuEsther T. Mertz Library":"Q31079305",
+    "The LuEsther T Mertz Library, the New York Botanical Garden":"Q31079305"
 }
 
-TEST=False
 
 def main(csv_path):
 
@@ -48,7 +56,7 @@ def main(csv_path):
         reader = csv.DictReader(f, delimiter='\t')
         for row in reader:
             file_name = row.get("File", "").strip()
-            if ".pdf" in file_name:
+            if ".pdf" in file_name or ".djvu" in file_name:
                 logging.warning(f"Skipping row with PDF file: {file_name}")
                 continue
             if not file_name:
@@ -64,12 +72,30 @@ def main(csv_path):
                 continue
 
             new_statements = []
-            add_instance_claim(row, new_statements)
-            add_published_in_claim(row, new_statements)
+            if not CUSTOM_INSTANCE_OF:
+                add_instance_claim(row, new_statements)
+            if not SKIP_PUBLISHED_IN:
+                add_published_in_claim(row, new_statements)
             add_collection_claim(row, new_statements)
             add_digital_sponsor_claim(row, new_statements)
             add_bhl_id_claim(row, new_statements)
-            add_illustrator_claim(row, new_statements)
+            # Only add if "Illustration in the mix"
+            if "Illustration" in row.get("Instance of", ""):
+                if CUSTOM_INSTANCE_OF:
+                    # Check if the file has "instance of illustration or illustrated text
+                    instance_of_value = media.claims.get_json()["P31"][0]["mainsnak"]["datavalue"]["value"]["id"]
+                    if instance_of_value == 'Q131597974': # Illustrated Text
+                        add_illustrator_claim(row, new_statements)
+                        add_engraver_claim(row, new_statements)
+                    elif instance_of_value == 'Q178659': # Illustration
+                        add_illustrator_claim(row, new_statements)
+                        add_engraver_claim(row, new_statements)
+                    elif instance_of_value == 'Q125191': # Photograph
+                        # TODO
+                        pass
+                else:
+                    add_illustrator_claim(row, new_statements)
+                    add_engraver_claim(row, new_statements)
             add_depicts_claim(row, new_statements)
             add_inception_claim(row, new_statements)
 
@@ -77,6 +103,8 @@ def main(csv_path):
                 print(media.claims)
                 media.claims.add(new_statements, action_if_exists= wbi_enums.ActionIfExists.MERGE_REFS_OR_APPEND)
                 try:
+                    if TEST:
+                        input("Press Enter to write SDC data...")
                     media.write(summary=edit_summary)
                     logging.info(f"No errors when trying to update {file_name} with SDC data.")
                 except Exception as e:
@@ -174,13 +202,49 @@ def add_illustrator_claim(row, new_statements):
         qualifiers.add(qual_p518)
         qualifiers.add(qual_p3831)
 
+        references = References()
+        ref_url = row.get("Ref URL for Authors", "").strip()
+        if ref_url:
+            ref_obj = Reference()
+            ref_obj.add(URL(prop_nr="P854", value=ref_url))
+            references.add(ref_obj)
         claim_creator = Item(
                     prop_nr="P170",
                     value=illustrator,
-                    qualifiers=qualifiers
+                    qualifiers=qualifiers,
+                    references=references
                 )
         new_statements.append(claim_creator)
 
+def add_engraver_claim(row, new_statements):
+    engraver = row.get("Engraver", "").strip()
+    if engraver:
+        qual_p3831 = Item(
+                    prop_nr="P3831",
+                    value="Q329439"
+                )
+        qual_p518 = Item(
+                    prop_nr="P518",
+                    value="Q112134971"  # "analog work"
+                )
+        qualifiers = Qualifiers()
+        qualifiers.add(qual_p518)
+        qualifiers.add(qual_p3831)
+        references = References()
+        ref_url = row.get("Ref URL for Authors", "").strip()
+        if ref_url:
+            ref_obj = Reference()
+            ref_obj.add(URL(prop_nr="P854", value=ref_url))
+            references.add(ref_obj) 
+
+        claim_engraver = Item(
+                    prop_nr="P170",
+                    value=engraver,
+                    qualifiers=qualifiers,
+                    references=references
+                )
+        new_statements.append(claim_engraver)
+    
 def add_bhl_id_claim(row, new_statements):
     bhl_page_id = row.get("BHL Page ID", "").strip()
     if bhl_page_id:
@@ -271,4 +335,4 @@ def add_published_in_claim(row, new_statements):
         new_statements.append(claim_published_in)
 
 if __name__ == "__main__":
-    main("/home/lubianat/Documents/wiki_related/bhl_sdc_exploration/reconciliation_bot/Abbildungen_zur_Naturgeschichte_Brasiliens.tsv")
+    main(f"/home/lubianat/Documents/wiki_related/bhl_sdc_exploration/reconciliation_bot/{CATEGORY.replace(" ", "_")}.tsv")
