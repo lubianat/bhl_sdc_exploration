@@ -4,15 +4,50 @@ from pathlib import Path
 import pandas as pd
 from bs4 import BeautifulSoup
 from tqdm import tqdm
+import requests
+from login import * 
+
+def get_flickr_tags(photo_id):
+    # Flickr API endpoint for getting tags of a photo
+    API_ENDPOINT = "https://www.flickr.com/services/rest/"
+
+    # Parameters for the API call
+    params = {
+        "method": "flickr.tags.getListPhoto",
+        "api_key": FLICKR_API_KEY,
+        "photo_id": photo_id,
+        "format": "json",
+        "nojsoncallback": 1  # Prevent JSONP callback, get plain JSON
+    }
+
+    # Make the API request
+    response = requests.get(API_ENDPOINT, params=params)
+
+    # Handle the API response
+    tag_raw_content = []
+    if response.status_code == 200:
+        data = response.json()
+        if data.get("stat") == "ok":
+            print("Tags for Photo ID", photo_id)
+            tags = data["photo"]["tags"]["tag"]
+            for tag in tags:
+                print(f"- {tag['raw']}")
+                tag_raw_content.append(tag['raw'])
+        else:
+            print("Error:", data.get("message"))
+    else:
+        print("Failed to fetch tags. HTTP Status Code:", response.status_code)
+    return tag_raw_content
 
 COMMONS_API_ENDPOINT = "https://commons.wikimedia.org/w/api.php"
 WIKIDATA_SPARQL_ENDPOINT = "https://query.wikidata.org/sparql"
 BHL_BASE_URL = "https://www.biodiversitylibrary.org"
 
 # Input category
-category_name = "Les bois indigènes de São Paulo"
+category_name = "Oiseaux brillans du Brésil (Descourtilz, 1834)"
 ILLUSTRATOR = "Q10340184"
 ENGRAVER = ""
+LITHOGRAPHER = "Q131861745"
 REF_URL_FOR_AUTHORS = ""
 category_name = category_name.replace("_", " ").replace("Category:", "").strip()
 def get_files_in_category(category_name):
@@ -54,12 +89,12 @@ def get_commons_wikitext(filename):
 
 def parse_bhl_template(wikitext):
     if not wikitext:
-        return {field: "" for field in ["pageid", "titleid", "pagetypes", "date", "author", "names"]}
+        return {field: "" for field in ["pageid", "titleid", "pagetypes", "date", "author", "names", "source"]}
     m = re.search(r'(?s)\{\{BHL\s*\|.*?\}\}', wikitext)
     if not m:
-        return {field: "" for field in ["pageid", "titleid", "pagetypes", "date", "author", "names"]}
+        return {field: "" for field in ["pageid", "titleid", "pagetypes", "date", "author", "names", "source"]}
     bhl_block = m.group(0)
-    field_names = ["pageid", "titleid", "pagetypes", "date", "author", "names"]
+    field_names = ["pageid", "titleid", "pagetypes", "date", "author", "names", "source"]
     results = {}
     for field in field_names:
         regex = r"\|\s*{}\s*=\s*(.*?)\n".format(field)
@@ -68,13 +103,13 @@ def parse_bhl_template(wikitext):
             value = fm.group(1).strip()
             value = re.sub(r"\}\}.*", "", value).strip()
             if field == "names":
-             # Example: | names = NameFound:Dicholophus cristatus NameConfirmed:Dicholophus cristatus  
-             # Regex to get the scientific name after NameFound)
+                # Example: | names = NameFound:Dicholophus cristatus NameConfirmed:Dicholophus cristatus  
+                # Regex to get the scientific name after NameFound)
                 try:
                     value = re.search(r"NameFound:([A-Za-z ]+)NameConfirmed", value).group(1)
                 except AttributeError:
                     try:
-                     value = re.search(r"NameFound:([A-Za-z ]+)", value).group(1)
+                        value = re.search(r"NameFound:([A-Za-z ]+)", value).group(1)
                     except AttributeError:
                         value = value
             results[field] = value
@@ -136,15 +171,17 @@ def generate_data(category_name):
         bhl_data = parse_bhl_template(wikitext)
         instance_of = bhl_data["pagetypes"]
         biblio_id = bhl_data["titleid"]
-        
+        # | source = https://www.flickr.com/photos/biodivlibrary/20552772278
+        flickr_id = bhl_data["source"].split("/")[-1] if bhl_data["source"] else ""
         if not url_printed:
             bhl_url = f"{BHL_BASE_URL}/bibliography/{biblio_id}"
             print(f"Visit the BHL page for this category: {bhl_url}")
             collection, sponsor = scrape_bhl_details(bhl_url)
             print(f"Detected Collection: {collection}")
             print(f"Detected Sponsor: {sponsor}")
-            if not collection or not sponsor:
+            if not collection:
                 collection = input("Enter the Collection (if not auto-detected): ").strip()
+            if not sponsor:
                 sponsor = input("Enter the Sponsor (if not auto-detected): ").strip()
             if ILLUSTRATOR != "":
                 illustrator = ILLUSTRATOR
@@ -154,12 +191,17 @@ def generate_data(category_name):
                 engraver = ENGRAVER
             else:
                 engraver = input("Enter the Engraver QID: ").strip()
+            if LITHOGRAPHER != "":
+                lithographer = LITHOGRAPHER
+            else:
+                lithographer = input("Enter the Lithographer QID: ").strip()
             if REF_URL_FOR_AUTHORS != "":
                 ref_url_for_authors = REF_URL_FOR_AUTHORS
             else: 
                 ref_url_for_authors = input("Enter the Ref URL for the authors: ").strip()
             url_printed = True
 
+        flickr_tags = get_flickr_tags(flickr_id)
         row = {
             "File": file or "",
             "BHL Page ID": bhl_data["pageid"] or "",
@@ -171,9 +213,12 @@ def generate_data(category_name):
             "Bibliography ID": biblio_id or "",
             "Illustrator": illustrator or "",
             "Engraver": engraver or "",
+            "Lithographer": lithographer or "",
             "Ref URL for Authors": ref_url_for_authors or "",
             "Inception": inception_date or "",
             "Names": bhl_data["names"] or "",
+            "Flickr ID": flickr_id or "",
+            "Flickr Tags": flickr_tags or ""
         }
         rows.append(row)
     

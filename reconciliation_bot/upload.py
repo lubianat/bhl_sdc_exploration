@@ -1,9 +1,9 @@
-TEST = False
+TEST = True
 CUSTOM_INSTANCE_OF = True
 PHOTOGRAPHS_ONLY = False
-CATEGORY = "Les bois indigènes de São Paulo"
-SKIP_PUBLISHED_IN = True
-
+CATEGORY = "Oiseaux_brillans_du_Brésil_(Descourtilz,_1834)"
+SKIP_PUBLISHED_IN = False
+ADD_EMPTY_IF_SPONSOR_MISSING = True
 INSTANCE_OF_DICT = {
     "Illustration": "Q178659",
     "Text Illustration": "Q131597974",
@@ -18,7 +18,8 @@ INSTITUTIONS_DICT = {
     "Missouri Botanical Garden, Peter H. Raven Library": "Q53530601",
     "Missouri Botanical Garden": "Q1852803",
     "New York Botanical Garden, LuEsther T. Mertz Library": "Q31079305",
-    "The LuEsther T Mertz Library, the New York Botanical Garden": "Q31079305"
+    "The LuEsther T Mertz Library, the New York Botanical Garden": "Q31079305",
+    "Natural History Museum Library, London":"Q69792905"
 }
 
 import csv
@@ -93,7 +94,12 @@ def main(csv_path):
                 add_published_in_claim(row, new_statements)
 
             add_collection_claim(row, new_statements)
+            if row["Sponsor"] =="":
+                if ADD_EMPTY_IF_SPONSOR_MISSING:
+                    add_blank_sponsor(row, new_statements)
+                    
             add_digital_sponsor_claim(row, new_statements)
+            
             add_bhl_id_claim(row, new_statements)
 
             # Only add illustrator/engraver if "Illustration" is in "Instance of" column
@@ -106,12 +112,15 @@ def main(csv_path):
                             # Either "Illustrated text" or "Illustration"
                             add_illustrator_claim(row, new_statements)
                             add_engraver_claim(row, new_statements)
+                            add_lithographer_claim(row, new_statements)
+
                         elif PHOTOGRAPHS_ONLY or instance_of_value == "Q125191":
                             # e.g. for photos, skip or handle differently
                             pass
                 else:
                     add_illustrator_claim(row, new_statements)
                     add_engraver_claim(row, new_statements)
+                    add_lithographer_claim(row, new_statements)
 
             add_depicts_claim(row, new_statements)
             add_inception_claim(row, new_statements)
@@ -122,13 +131,24 @@ def main(csv_path):
                     if TEST:
                         input("Press Enter to write SDC data...")
                     media.write(summary=edit_summary)
-                    logging.info(f"No errors when trying to update {file_name} with SDC data.")
+                    tqdm.write(f"No errors when trying to update {file_name} with SDC data.")
                 except Exception as e:
                     logging.error(f"Failed to write SDC for {file_name}: {e}")
             else:
                 logging.info(f"No SDC data to add for {file_name}, skipping...")
 
 from wdcuration import query_wikidata
+
+def get_qid_from_flickr_binomial_tags(flickr_tags):
+    qids = []
+    for tag in flickr_tags:
+        # Example tag + " 'taxonomy:binomial=Psittacus cyanogaster'"
+        if "taxonomy:binomial=" in tag:
+            taxon_name = tag.split("taxonomy:binomial=")[1].strip().replace("'", "")
+            qid = get_qid_from_taxon_name(taxon_name)
+            if qid:
+                qids.append(qid)
+    return qids
 
 def get_qid_from_taxon_name(taxon_name):
     query = f"""
@@ -149,7 +169,20 @@ def add_depicts_claim(row, new_statements):
             claim_depicts = Item(prop_nr="P180", value=qid)
             references = References()
             ref_obj = Reference()
-            ref_obj.add(Item(prop_nr="P887", value="Q131783016"))
+            ref_obj.add(Item(prop_nr="P887", value="Q131783016")) # Inferr
+            references.add(ref_obj)
+            claim_depicts.references = references
+            new_statements.append(claim_depicts)
+    flickr_tags = row.get("Flickr Tags", "").strip().split(",")
+    flickr_id = row.get("Flickr ID", "").strip()
+    if flickr_tags:
+        qids = get_qid_from_flickr_binomial_tags(flickr_tags)
+        for qid in qids:
+            claim_depicts = Item(prop_nr="P180", value=qid)
+            references = References()
+            ref_obj = Reference()
+            ref_obj.add(Item(prop_nr="P887", value="Q131782980")) # Inferred from Flickr tag
+            ref_obj.add(URL(prop_nr="P854", value=f"https://www.flickr.com/photo.gne?id={flickr_id}"))
             references.add(ref_obj)
             claim_depicts.references = references
             new_statements.append(claim_depicts)
@@ -200,6 +233,28 @@ def add_illustrator_claim(row, new_statements):
         )
         new_statements.append(claim_creator)
 
+def add_lithographer_claim(row, new_statements):
+    lithographer = row.get("Lithographer", "").strip()
+    if lithographer:
+        qualifiers = Qualifiers()
+        qualifiers.add(Item(prop_nr="P518", value="Q112134971"))  # analog work
+        qualifiers.add(Item(prop_nr="P3831", value="Q16947657"))    # lithographer
+
+        references = References()
+        ref_url = row.get("Ref URL for Authors", "").strip()
+        if ref_url:
+            ref_obj = Reference()
+            ref_obj.add(URL(prop_nr="P854", value=ref_url))
+            references.add(ref_obj)
+
+        claim_lithographer = Item(
+            prop_nr="P170",
+            value=lithographer,
+            qualifiers=qualifiers,
+            references=references
+        )
+        new_statements.append(claim_lithographer)
+
 def add_engraver_claim(row, new_statements):
     engraver = row.get("Engraver", "").strip()
     if engraver:
@@ -227,6 +282,25 @@ def add_bhl_id_claim(row, new_statements):
     if bhl_page_id:
         claim_bhl = ExternalID(prop_nr="P687", value=bhl_page_id)
         new_statements.append(claim_bhl)
+
+def add_blank_sponsor(row, new_statements):
+    qualifiers = Qualifiers()
+    qualifiers.add(Item(prop_nr="P3831", value="Q131344184"))  # digitization sponsor
+
+    references = References()
+    bib_id = row.get("Bibliography ID", "").strip()
+    if bib_id:
+        ref_obj = Reference()
+        ref_obj.add(URL(prop_nr="P854", value=f"https://www.biodiversitylibrary.org/bibliography/{bib_id}"))
+        references.add(ref_obj)
+
+    claim_sponsor = Item(
+        prop_nr="P859",
+        snaktype="somevalue",
+        qualifiers=qualifiers,
+        references=references
+    )
+    new_statements.append(claim_sponsor)
 
 def add_digital_sponsor_claim(row, new_statements):
     sponsor = row.get("Sponsor", "").strip()
@@ -294,6 +368,6 @@ def add_published_in_claim(row, new_statements):
 
 if __name__ == "__main__":
     main(
-        f"/home/lubianat/Documents/wiki_related/bhl_sdc_exploration/reconciliation_bot/"
+        f"/home/lubianat/Documents/wiki_related/BHL/bhl_sdc_exploration/reconciliation_bot/"
         f"{CATEGORY.replace(' ', '_')}.tsv"
     )
